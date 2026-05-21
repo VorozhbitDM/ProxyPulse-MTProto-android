@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProxyPulse</string>
+    <string name="tagline">Ищем MTProto-прокси и проверяем доступность</string>
+    <string name="start_search">Начать поиск</string>
+    <string name="cancel_search">Прервать поиск</string>
+    <string name="new_search">Новый поиск</string>
+    <string name="settings">Настройки</string>
+    <string name="help">Справка</string>
+    <string name="help_desc">Ищем MTProto-прокси и проверяем доступность. Нажмите «Начать поиск», затем выберите прокси в списке — откроется Telegram.</string>
+    <string name="help_github">Проект на GitHub</string>
+    <string name="help_yoomoney">ЮMoney</string>
+    <string name="link_open_failed">Не удалось открыть ссылку</string>
+    <string name="max_proxies_hint">Шаг 10 (от 10 до 500)</string>
+    <string name="found_count">Найдено %1$d</string>
+    <string name="collect_progress">Сбор… %1$d из %2$d</string>
+    <string name="check_progress">Проверка… %1$d/%2$d</string>
+    <string name="check_done">Проверка завершена %1$d/%2$d</string>
+    <string name="connecting">Подключение…</string>
+    <string name="search_paused">Поиск приостановлен</string>
+    <string name="search_done">Готово · %1$d прокси</string>
+    <string name="recheck">Обновить</string>
+    <string name="rechecking">Проверка…</string>
+    <string name="checking_one">Проверка: %1$s</string>
+    <string name="check_parallel">Проверка %1$d прокси…</string>
+    <string name="recheck_ok">%1$s — доступен</string>
+    <string name="recheck_fail">%1$s — недоступен</string>
+    <string name="max_proxies">Лимит прокси</string>
+    <string name="dark_theme">Тёмная тема</string>
+    <string name="save">Сохранить</string>
+    <string name="back">Назад</string>
+    <string name="feed_failed">Не удалось загрузить прокси. Проверьте интернет и доступ к web.archive.org.</string>
+    <string name="no_telegram">Установите Telegram для подключения прокси</string>
+    <string name="version_label">v%1$s</string>
+</resources>

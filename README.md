@@ -10,11 +10,9 @@
 <p align="center">
   <a href="https://github.com/VorozhbitDM/ProxyPulse-MTProto-android/releases/latest"><img src="https://img.shields.io/github/v/release/VorozhbitDM/ProxyPulse-MTProto-android?style=flat-square&label=Release&color=brightgreen" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android">
-  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Android-8.0+%20(API%2026)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+">
   <a href="https://github.com/VorozhbitDM/ProxyPulse-MTProto-android/releases"><img src="https://img.shields.io/github/downloads/VorozhbitDM/ProxyPulse-MTProto-android/total?label=Downloads&logo=github&style=flat-square&cacheSeconds=600" alt="Downloads"></a>
   <br>
-  <a href="https://github.com/VorozhbitDM/ProxyPulse-MTProto-for-TG"><img src="https://img.shields.io/badge/Версия%20для-Windows%2010%2F11-0078D6?style=flat-square" alt="Windows"></a>
 </p>
 
 ---

@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Поиск MTProto-прокси и проверка доступности</strong><br>
-  Подключение в Telegram одним тапом · Android · без VPN и API-ключей
+  Подключение в Telegram одним тапом · Android · без VPN
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ---
 
-[💻 Версия для Windows](https://github.com/VorozhbitDM/ProxyPulse-MTProto-windows)
+[💻 Версия для Windows](https://github.com/VorozhbitDM/ProxyPulse-MTProto-for-TG)
 
 ---
 

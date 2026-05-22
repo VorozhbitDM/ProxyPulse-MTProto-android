@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Совпадает с краем круга на app.png -->
-    <color name="ic_launcher_background">#0B1522</color>
+    <!-- Фон adaptive icon — совпадает с Newicon333.jpg / Telegram blue -->
+    <color name="ic_launcher_background">#2AABEE</color>
 </resources>

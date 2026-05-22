@@ -1,7 +1,8 @@
 package com.proxypulse.data.health
 
+import com.proxypulse.data.health.mtproxy.MtProxySecret
+import com.proxypulse.data.health.mtproxy.MtProxyVerifier
 import com.proxypulse.domain.ProxyEntry
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -9,7 +10,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.coroutines.coroutineContext
@@ -23,10 +23,14 @@ data class ProxyCheckResult(
     val pingMs: Int?
 )
 
+/**
+ * 1) MTProxy handshake (Fake-TLS + obfuscated), 2) запасной TCP+secret (порт открыт).
+ * Архивная лента часто мёртвая; без TCP-запаса список часто пустой.
+ */
 class ProxyHealthService(
-    private val dnsTimeoutMs: Int = 2000,
-    private val connectTimeoutMs: Int = 2000,
-    private val concurrency: Int = 50
+    private val mtProxyTimeoutMs: Int = MtProxyVerifier.DEFAULT_CHECK_TIMEOUT_MS,
+    private val tcpTimeoutMs: Int = 3500,
+    private val concurrency: Int = 30
 ) {
     suspend fun scan(
         proxies: List<ProxyEntry>,
@@ -59,57 +63,36 @@ class ProxyHealthService(
 
     suspend fun checkOne(proxy: ProxyEntry): ProxyCheckResult = withContext(Dispatchers.IO) {
         coroutineContext.ensureActive()
-        val pingMs = measureTcpPing(proxy.server, proxy.port)
+        val tcpPing = measureTcpPing(proxy.server, proxy.port, proxy.secret)
+            ?: return@withContext ProxyCheckResult(proxy, isAvailable = false, pingMs = null)
+        val mtPing = MtProxyVerifier.measurePing(
+            host = proxy.server,
+            port = proxy.port,
+            secretHex = proxy.secret,
+            timeoutMs = mtProxyTimeoutMs
+        )
         ProxyCheckResult(
             entry = proxy,
-            isAvailable = pingMs != null,
-            pingMs = pingMs
+            isAvailable = true,
+            pingMs = mtPing ?: tcpPing
         )
     }
 
-    private fun measureTcpPing(host: String, port: Int): Int? {
-        val addresses = resolveAddresses(host) ?: return null
-        for (address in orderAddresses(addresses)) {
-            val start = System.currentTimeMillis()
-            if (tryConnect(address, port)) {
-                return maxOf(1, (System.currentTimeMillis() - start).toInt())
-            }
-        }
-        return null
-    }
-
-    private fun resolveAddresses(host: String): Array<InetAddress>? {
+    private fun measureTcpPing(host: String, port: Int, secret: String): Int? {
+        if (MtProxySecret.parse(secret) == null) return null
+        if (host.isBlank() || port !in 1..65535) return null
+        val start = System.currentTimeMillis()
         return try {
-            val parsed = InetAddress.getByName(host)
-            if (parsed.hostAddress == host || !parsed.hostAddress.contains(":")) {
-                arrayOf(parsed)
-            } else {
-                InetAddress.getAllByName(host)
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), tcpTimeoutMs)
+                if (socket.isConnected) {
+                    maxOf(1, (System.currentTimeMillis() - start).toInt())
+                } else {
+                    null
+                }
             }
         } catch (_: Exception) {
             null
-        }
-    }
-
-    private fun orderAddresses(addresses: Array<InetAddress>): List<InetAddress> =
-        addresses.sortedWith(
-            compareBy<InetAddress> {
-                when {
-                    it.address.size == 4 -> 0
-                    it.address.size == 16 -> 1
-                    else -> 2
-                }
-            }
-        )
-
-    private fun tryConnect(address: InetAddress, port: Int): Boolean {
-        return try {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress(address, port), connectTimeoutMs)
-                socket.isConnected
-            }
-        } catch (_: Exception) {
-            false
         }
     }
 }

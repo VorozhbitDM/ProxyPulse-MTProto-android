@@ -3,6 +3,7 @@
 /local.properties
 /.idea/
 /build/
+/old
 /app/build/
 /captures/
 .externalNativeBuild/

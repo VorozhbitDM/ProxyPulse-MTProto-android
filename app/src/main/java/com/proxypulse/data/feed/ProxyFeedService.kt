@@ -23,7 +23,10 @@ class ProxyFeedService {
         val errors = mutableListOf<String>()
 
         reportCdx(progress, 0, cdxCap, 0, cap)
-        log?.invoke("Сбор: лента (1 стр.) + до $cdxCap снимков CDX → $cap прокси…")
+        log?.invoke("Загрузка: списки + лента (1 стр.) + до $cdxCap снимков CDX → $cap прокси…")
+
+        ProxyTextListFeed.loadInto(seen, output, cap, log)
+        reportCdx(progress, 0, cdxCap, seen.size, cap)
 
         val cdxDeferred = async { ArchiveCdxService.getRecentSnapshotIds(log) }
 
@@ -50,7 +53,7 @@ class ProxyFeedService {
             )
         }
 
-        log?.invoke("Сбор завершён: ${seen.size}/$cap прокси · CDX снимков $cdxOk")
+        log?.invoke("Загрузка завершена: ${seen.size}/$cap прокси · CDX снимков $cdxOk")
     }
 
     private suspend fun tryLoadFeedFirstPage(

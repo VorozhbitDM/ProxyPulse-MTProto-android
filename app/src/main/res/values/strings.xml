@@ -7,13 +7,13 @@
     <string name="new_search">Новый поиск</string>
     <string name="settings">Настройки</string>
     <string name="help">Справка</string>
-    <string name="help_desc">Ищем MTProto-прокси и проверяем доступность. Нажмите «Начать поиск», затем выберите прокси в списке — откроется Telegram.</string>
+    <string name="help_desc">Сначала проверка MTProxy (как в Telegram), затем TCP+secret. Сначала загружаются свежие списки proxy_eu/ru, потом архив. Прокси только с открытым портом и валидным secret. В Telegram часть может не подключиться — нажмите «Обновить».</string>
     <string name="help_github">Проект на GitHub</string>
     <string name="help_yoomoney">ЮMoney</string>
     <string name="link_open_failed">Не удалось открыть ссылку</string>
     <string name="max_proxies_hint">Шаг 10 (от 10 до 500)</string>
     <string name="found_count">Найдено %1$d</string>
-    <string name="collect_progress">Сбор… %1$d из %2$d</string>
+    <string name="collect_progress">Загрузка… %1$d из %2$d</string>
     <string name="check_progress">Проверка… %1$d/%2$d</string>
     <string name="check_done">Проверка завершена %1$d/%2$d</string>
     <string name="connecting">Подключение…</string>

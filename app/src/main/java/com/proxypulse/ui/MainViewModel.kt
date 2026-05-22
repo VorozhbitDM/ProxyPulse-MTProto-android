@@ -211,7 +211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             viewModelScope.launch(Dispatchers.Main.immediate) {
                                 _uiState.update {
                                     it.copy(
-                                        proxies = sortedList.entries,
+                                        proxies = sortedList.snapshot(),
                                         foundCount = sortedList.count,
                                         showFoundCount = true
                                     )
@@ -281,7 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     recheckingKeys = it.recheckingKeys - entry.key,
-                    proxies = sortedList.entries,
+                    proxies = sortedList.snapshot(),
                     foundCount = sortedList.count,
                     showFoundCount = sortedList.count > 0,
                     activityLine = getApplication<Application>().getString(

@@ -2,17 +2,20 @@ package com.proxypulse.ui
 
 import com.proxypulse.domain.ProxyEntry
 
-/** Keeps available proxies sorted by ping ascending. */
+/** Keeps available proxies sorted by ping ascending. Thread-safe for parallel health checks. */
 class SortedProxyList {
+    private val lock = Any()
     private val byKey = linkedMapOf<String, ProxyEntry>()
     private val sortedKeys = mutableListOf<String>()
 
-    val entries: List<ProxyEntry>
-        get() = sortedKeys.mapNotNull { byKey[it] }
+    val count: Int
+        get() = synchronized(lock) { sortedKeys.size }
 
-    val count: Int get() = sortedKeys.size
+    fun snapshot(): List<ProxyEntry> = synchronized(lock) {
+        sortedKeys.mapNotNull { byKey[it] }
+    }
 
-    fun upsertAvailable(entry: ProxyEntry, pingMs: Int?) {
+    fun upsertAvailable(entry: ProxyEntry, pingMs: Int?) = synchronized(lock) {
         entry.isAvailable = true
         entry.pingMs = pingMs
         byKey[entry.key] = entry
@@ -26,12 +29,12 @@ class SortedProxyList {
         else sortedKeys.add(insertAt, entry.key)
     }
 
-    fun remove(key: String) {
+    fun remove(key: String) = synchronized(lock) {
         byKey.remove(key)
         sortedKeys.remove(key)
     }
 
-    fun clear() {
+    fun clear() = synchronized(lock) {
         byKey.clear()
         sortedKeys.clear()
     }

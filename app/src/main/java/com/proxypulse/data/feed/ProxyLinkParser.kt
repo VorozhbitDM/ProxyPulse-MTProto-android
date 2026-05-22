@@ -9,6 +9,10 @@ object ProxyLinkParser {
         """(?:tg://proxy/?\?|https?://(?:t\.me|telegram\.me)/proxy\?|/proxy\?)([^"'\s<>]+)""",
         RegexOption.IGNORE_CASE
     )
+    private val inlineFieldsRegex = Regex(
+        """server=([^&\s"'<>]+)&port=(\d+)&secret=([0-9a-fA-F]+)""",
+        RegexOption.IGNORE_CASE
+    )
 
     fun looksLikeTelegramFeed(html: String?): Boolean {
         if (html.isNullOrEmpty()) return false
@@ -22,6 +26,16 @@ object ProxyLinkParser {
         val result = mutableListOf<ProxyEntry>()
         for (match in linkRegex.findAll(normalized)) {
             tryParseQuery(match.groupValues[1])?.let { result.add(it) }
+        }
+        if (result.isEmpty()) {
+            for (match in inlineFieldsRegex.findAll(normalized)) {
+                val server = match.groupValues[1].trim().trimEnd('.')
+                val port = match.groupValues[2].toIntOrNull() ?: continue
+                val secret = match.groupValues[3].trim()
+                if (server.isNotBlank() && port in 1..65535 && secret.isNotBlank()) {
+                    result.add(ProxyEntry(server, port, secret))
+                }
+            }
         }
         return result
     }

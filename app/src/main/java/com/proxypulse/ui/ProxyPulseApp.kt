@@ -3,15 +3,19 @@ package com.proxypulse.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,6 +55,8 @@ import com.proxypulse.AppLinks
 import com.proxypulse.R
 import com.proxypulse.data.settings.SettingsRepository
 import com.proxypulse.domain.ProxyEntry
+import com.proxypulse.ui.theme.pingAccentColor
+import com.proxypulse.ui.theme.pingTextColor
 import com.proxypulse.ui.theme.ProxyPulseTheme
 import kotlin.math.roundToInt
 
@@ -273,6 +279,7 @@ private fun ProxyCard(
     onOpen: (ProxyEntry) -> Unit,
     onRecheck: (ProxyEntry) -> Unit
 ) {
+    val accentColor = entry.pingAccentColor()
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -280,42 +287,51 @@ private fun ProxyCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(accentColor)
+            )
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = !isRechecking) { onOpen(entry) }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(entry.displayLabel, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = if (isRechecking) {
-                        stringResource(R.string.rechecking)
-                    } else {
-                        entry.pingDisplay
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isRechecking) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    }
-                )
-            }
-            if (isRechecking) {
-                CircularProgressIndicator(
+                Column(
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(28.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
-                OutlinedButton(
-                    onClick = { onRecheck(entry) },
-                    modifier = Modifier.padding(start = 4.dp)
+                        .weight(1f)
+                        .clickable(enabled = !isRechecking) { onOpen(entry) }
                 ) {
-                    Text(stringResource(R.string.recheck), fontSize = 12.sp)
+                    Text(entry.displayLabel, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = if (isRechecking) {
+                            stringResource(R.string.rechecking)
+                        } else {
+                            entry.pingDisplay
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = entry.pingTextColor(isRechecking)
+                    )
+                }
+                if (isRechecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(28.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = { onRecheck(entry) },
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        Text(stringResource(R.string.recheck), fontSize = 12.sp)
+                    }
                 }
             }
         }

@@ -51,7 +51,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.RadioButton
 import com.proxypulse.AppLinks
+import com.proxypulse.BuildConfig
+import com.proxypulse.domain.FeedSourceMode
 import com.proxypulse.R
 import com.proxypulse.data.settings.SettingsRepository
 import com.proxypulse.domain.ProxyEntry
@@ -104,8 +109,18 @@ fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
                     Screen.Settings -> SettingsScreen(
                         maxProxies = uiState.settingsDraftMax,
                         darkTheme = uiState.settingsDraftDark,
+                        feedSource = uiState.settingsDraftFeedSource,
+                        tgStatStatus = uiState.tgStatStatus,
+                        tgStatBusy = uiState.tgStatBusy,
+                        tgStatHasSession = uiState.tgStatHasSession,
+                        tgStatCanOpenBot = uiState.tgStatAuthKey != null,
                         onMaxChange = { viewModel.updateSettingsDraftMax(it) },
                         onDarkChange = { viewModel.updateSettingsDraftDark(it) },
+                        onFeedSourceChange = { viewModel.updateSettingsDraftFeedSource(it) },
+                        onTgStatLogin = { viewModel.startTgStatTelegramLogin() },
+                        onTgStatOpenBot = { viewModel.openTgStatTelegramBot() },
+                        onTgStatVerify = { viewModel.verifyTgStatSession() },
+                        onTgStatClear = { viewModel.clearTgStatSession() },
                         onSave = { viewModel.saveSettings() }
                     )
                     Screen.Help -> HelpScreen()
@@ -147,7 +162,7 @@ private fun AppTopBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = stringResource(R.string.version_label, "2.8"),
+                    text = stringResource(R.string.version_label, appVersionShort()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                 )
@@ -317,6 +332,26 @@ private fun ProxyCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = entry.pingTextColor(isRechecking)
                     )
+                    if (!isRechecking) {
+                        entry.publishedCaption?.let { caption ->
+                            Text(
+                                text = caption,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+                if (!isRechecking) {
+                    Text(
+                        text = stringResource(R.string.connect_hint),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .clickable { onOpen(entry) },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
                 if (isRechecking) {
                     CircularProgressIndicator(
@@ -342,16 +377,31 @@ private fun ProxyCard(
 private fun SettingsScreen(
     maxProxies: Int,
     darkTheme: Boolean,
+    feedSource: FeedSourceMode,
+    tgStatStatus: String,
+    tgStatBusy: Boolean,
+    tgStatHasSession: Boolean,
+    tgStatCanOpenBot: Boolean,
     onMaxChange: (Int) -> Unit,
     onDarkChange: (Boolean) -> Unit,
+    onFeedSourceChange: (FeedSourceMode) -> Unit,
+    onTgStatLogin: () -> Unit,
+    onTgStatOpenBot: () -> Unit,
+    onTgStatVerify: () -> Unit,
+    onTgStatClear: () -> Unit,
     onSave: () -> Unit
 ) {
     val min = SettingsRepository.MIN_MAX
     val max = SettingsRepository.MAX_MAX
+    val scroll = rememberScrollState()
+    val showTgStat = feedSource == FeedSourceMode.Bypass
+    val highlightLogin = showTgStat && !tgStatHasSession && !tgStatCanOpenBot
+    val highlightVerify = showTgStat && (tgStatHasSession || tgStatCanOpenBot)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scroll)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -369,6 +419,87 @@ private fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
+
+        Text(stringResource(R.string.feed_source), style = MaterialTheme.typography.titleMedium)
+        FeedSourceRow(
+            label = stringResource(R.string.feed_source_direct),
+            selected = feedSource == FeedSourceMode.Direct,
+            onClick = { onFeedSourceChange(FeedSourceMode.Direct) }
+        )
+        FeedSourceRow(
+            label = stringResource(R.string.feed_source_bypass),
+            selected = feedSource == FeedSourceMode.Bypass,
+            onClick = { onFeedSourceChange(FeedSourceMode.Bypass) }
+        )
+        Text(
+            text = if (feedSource == FeedSourceMode.Direct) {
+                stringResource(R.string.feed_hint_direct)
+            } else {
+                stringResource(R.string.feed_hint_bypass)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+        )
+
+        if (showTgStat) {
+            Text(stringResource(R.string.tgstat_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.tgstat_step1), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.tgstat_step2), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.tgstat_step3), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.tgstat_step4), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.tgstat_step5), style = MaterialTheme.typography.bodySmall)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (highlightLogin) {
+                    Button(onClick = onTgStatLogin, enabled = !tgStatBusy) {
+                        Text(stringResource(R.string.tgstat_login_telegram))
+                    }
+                } else {
+                    OutlinedButton(onClick = onTgStatLogin, enabled = !tgStatBusy) {
+                        Text(stringResource(R.string.tgstat_login_telegram))
+                    }
+                }
+                if (tgStatCanOpenBot) {
+                    Button(onClick = onTgStatOpenBot, enabled = !tgStatBusy) {
+                        Text(stringResource(R.string.tgstat_open_telegram))
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (highlightVerify) {
+                    Button(onClick = onTgStatVerify, enabled = !tgStatBusy) {
+                        Text(stringResource(R.string.tgstat_verify))
+                    }
+                } else {
+                    OutlinedButton(onClick = onTgStatVerify, enabled = !tgStatBusy) {
+                        Text(stringResource(R.string.tgstat_verify))
+                    }
+                }
+                OutlinedButton(onClick = onTgStatClear, enabled = !tgStatBusy) {
+                    Text(stringResource(R.string.tgstat_clear))
+                }
+            }
+
+            if (tgStatBusy) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.tgstat_connecting), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (tgStatStatus.isNotEmpty()) {
+                Text(
+                    tgStatStatus,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -377,10 +508,23 @@ private fun SettingsScreen(
             Text(stringResource(R.string.dark_theme))
             Switch(checked = darkTheme, onCheckedChange = onDarkChange)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.save))
         }
+    }
+}
+
+@Composable
+private fun FeedSourceRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
@@ -401,7 +545,7 @@ private fun HelpScreen() {
             color = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = stringResource(R.string.version_label, "2.8"),
+            text = stringResource(R.string.version_label, appVersionShort()),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
@@ -432,3 +576,5 @@ private fun openUrl(context: android.content.Context, url: String) {
         Toast.makeText(context, R.string.link_open_failed, Toast.LENGTH_LONG).show()
     }
 }
+
+private fun appVersionShort(): String = BuildConfig.VERSION_LABEL

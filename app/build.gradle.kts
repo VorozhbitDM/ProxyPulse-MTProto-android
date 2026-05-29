@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -8,17 +10,41 @@ android {
     namespace = "com.proxypulse"
     compileSdk = 35
 
+    val appVersionLabel = "2.9"
+
     defaultConfig {
         applicationId = "com.proxypulse"
         minSdk = 26
         targetSdk = 34
-        versionCode = 280
-        versionName = "2.8.0"
+        versionCode = 291
+        versionName = "$appVersionLabel.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "VERSION_LABEL", "\"$appVersionLabel\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                val props = Properties().apply {
+                    propsFile.inputStream().use { load(it) }
+                }
+                storeFile = rootProject.file(props.getProperty("storeFile")!!)
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
+            // Без keystore.properties — debug-подпись (только для установки у себя, не для Play).
+            signingConfig = if (rootProject.file("keystore.properties").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -38,6 +64,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

@@ -23,10 +23,12 @@
 
 ## Возможности
 
-
-- собирает прокси из общедоступных источников (лимит настраивается, по умолчанию 100);
+- собирает прокси из ленты @ProxyMTProto (лимит настраивается, по умолчанию 100);
+- два режима источника: **прямой** (t.me с пагинацией) и **обходной** (TGStat + web.archive.org);
+- вход в **TGStat** через Telegram-бота @tg_analytics_bot для полной ленты;
 - проверяет **доступность**;
 - сортирует по задержке;
+- показывает дату публикации поста;
 - открывает выбранный прокси в **Telegram** одним тапом.
 
 ---
@@ -44,6 +46,8 @@
 | Параметр | По умолчанию | Описание |
 |----------|--------------|----------|
 | **Лимит прокси** | `100` | Сколько уникальных прокси собрать за один поиск (от 10 до 500, шаг 10). |
+| **Источник ленты** | Обходной | **Прямой (t.me)** — только живая лента Telegram. **Обходной (TGStat + Archive)** — сначала TGStat, затем добор из archive.org. |
+| **TGStat** | не входили | Для обходного режима: вход через бота @tg_analytics_bot открывает пагинацию (без входа ~30 прокси). |
 | **Тема** | Тёмная | Переключатель «Тёмная» / «Светлая». |
 
 Настройки сохраняются на устройстве (DataStore) и подхватываются при следующем запуске.
@@ -73,18 +77,35 @@ cd ProxyPulse-MTProto-android
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+cd android
 .\gradlew.bat assembleDebug
 ```
 
 **Linux / macOS:**
 
 ```bash
+cd android
 ./gradlew assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-Установка на устройство: `adb install -r app\build\outputs\apk\debug\app-debug.apk`
+Release-сборка (подписанный APK, можно ставить на телефон):
+
+```powershell
+cd android
+.\gradlew.bat assembleRelease
+```
+
+Файл: `app\build\outputs\apk\release\app-release.apk` (не `app-release-unsigned.apk`).
+
+Для GitHub Releases скопируйте и переименуйте, например: `ProxyPulse-v2.9-android.apk` (версию возьмите из `versionName` в `app/build.gradle.kts`).
+
+Без `keystore.properties` release подписывается debug-ключом — для своего телефона это нормально. Для GitHub/Play создайте keystore — см. [docs/signing.md](docs/signing.md).
+
+Быстрая установка для теста: `app\build\outputs\apk\debug\app-debug.apk`
+
+Установка: `adb install -r app\build\outputs\apk\release\app-release.apk`
 
 ### Иконка приложения
 

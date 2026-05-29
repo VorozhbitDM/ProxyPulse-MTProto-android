@@ -16,6 +16,8 @@ import kotlinx.coroutines.ensureActive
 
 object HttpDownloadHelper {
     const val DEFAULT_TIMEOUT_MS = 20_000L
+    const val PAGINATION_TIMEOUT_MS = 22_000L
+    const val PAGINATION_MAX_ATTEMPTS = 3
     const val CDX_LIST_TIMEOUT_MS = 35_000L
     const val CDX_SNAPSHOT_TIMEOUT_MS = 20_000L
 

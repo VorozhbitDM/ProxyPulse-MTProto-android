@@ -10,6 +10,7 @@ object PingColor {
     val Good = Color(0xFF27AE60)
     val Medium = Color(0xFFE67E22)
     val Bad = Color(0xFFE74C3C)
+    val StarGold = Color(0xFFFFC107)
 
     fun forMs(ms: Int): Color = when {
         ms < 200 -> Good

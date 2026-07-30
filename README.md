@@ -1,10 +1,10 @@
 <p align="center">
-  <img alt="ProxyPulse — MTProto-прокси для Telegram (Android)" src="docs/banner.jpg" width="900">
+  <img alt="ProxyPulse Lite — MTProto-прокси для Telegram (Android)" src="docs/banner.jpg" width="900">
 </p>
 
 <p align="center">
-  <strong>Поиск MTProto-прокси и проверка доступности</strong><br>
-  Подключение в Telegram одним тапом · Android · без VPN
+  <strong>ProxyPulse Lite</strong><br>
+  Первая страница TGStat · проверка · подключение в Telegram одним тапом
 </p>
 
 <p align="center">
@@ -21,38 +21,23 @@
 
 ---
 
-## Возможности
+## Возможности (Lite)
 
-- собирает прокси из ленты @ProxyMTProto (лимит настраивается, по умолчанию 100);
-- два режима источника: **прямой** (t.me с пагинацией) и **обходной** (TGStat + web.archive.org);
-- вход в **TGStat** через Telegram-бота @tg_analytics_bot для полной ленты;
-- проверяет **доступность**;
-- сортирует по задержке;
-- показывает дату публикации поста;
-- открывает выбранный прокси в **Telegram** одним тапом.
+- загружает прокси с **первой страницы TGStat** (@ProxyMTProto) — без входа и пагинации;
+- проверяет **доступность** и измеряет ping;
+- показывает **реакции ★** с поста TGStat (лайки пользователей);
+- сортировка: **по пингу** или **по реакциям**;
+- открывает выбранный прокси в **Telegram** одним тапом;
+- минимум настроек (только тема).
 
 ---
 
 ## Быстрый старт
 
 1. Установите APK из [релизов](https://github.com/VorozhbitDM/ProxyPulse-MTProto-android/releases/latest) или соберите сами (см. ниже).
-2. Запустите **ProxyPulse** и нажмите **«Начать поиск»**.
+2. Запустите **ProxyPulse Lite** и нажмите **«Начать поиск»**.
 3. Тап по прокси в списке — Telegram предложит подключение.
-
-### Настройки
-
-Кнопка **«Настройки»** на стартовом экране и в шапке во время поиска.
-
-| Параметр | По умолчанию | Описание |
-|----------|--------------|----------|
-| **Лимит прокси** | `100` | Сколько уникальных прокси собрать за один поиск (от 10 до 500, шаг 10). |
-| **Источник ленты** | Обходной | **Прямой (t.me)** — только живая лента Telegram. **Обходной (TGStat + Archive)** — сначала TGStat, затем добор из archive.org. |
-| **TGStat** | не входили | Для обходного режима: вход через бота @tg_analytics_bot открывает пагинацию (без входа ~30 прокси). |
-| **Тема** | Тёмная | Переключатель «Тёмная» / «Светлая». |
-
-Настройки сохраняются на устройстве (DataStore) и подхватываются при следующем запуске.
-
-На экране поиска: **«Загрузка… N из 100»** — число справа берётся из настройки. Проверяются все загруженные прокси; **«Найдено M»** — сколько из них оказались доступными.
+4. При необходимости переключите сортировку: «По рейтингу» / «По пингу» (по умолчанию — по рейтингу).
 
 ### Требования
 
@@ -60,7 +45,7 @@
 |---|---|
 | ОС | Android **8.0+** |
 | Telegram | Установленное приложение Telegram |
-| Сеть | Доступ в интернет для сбора ленты и проверки TCP |
+| Сеть | Доступ в интернет (TGStat + проверка прокси) |
 
 ---
 
@@ -77,46 +62,30 @@ cd ProxyPulse-MTProto-android
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
-cd android
 .\gradlew.bat assembleDebug
 ```
 
 **Linux / macOS:**
 
 ```bash
-cd android
 ./gradlew assembleDebug
 ```
 
-APK: `android/app/build/outputs/apk/debug/app-debug.apk`
+APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-Release-сборка (подписанный APK, можно ставить на телефон):
+Release-сборка:
 
 ```powershell
-cd android
 .\gradlew.bat assembleRelease
 ```
 
-Файл: `app\build\outputs\apk\release\app-release.apk` (не `app-release-unsigned.apk`).
+Файл: `app\build\outputs\apk\release\app-release.apk`.
 
-Для GitHub Releases скопируйте и переименуйте, например: `ProxyPulse-v2.9-android.apk` (версию возьмите из `versionName` в `app/build.gradle.kts`).
+Для GitHub Releases: `ProxyPulse-v3.0-lite-android.apk` (версию возьмите из `versionName` в `app/build.gradle.kts`).
 
 Без `keystore.properties` release подписывается debug-ключом — для своего телефона это нормально. Для GitHub/Play создайте keystore — см. [docs/signing.md](docs/signing.md).
 
-Быстрая установка для теста: `app\build\outputs\apk\debug\app-debug.apk`
-
 Установка: `adb install -r app\build\outputs\apk\release\app-release.apk`
-
-### Иконка приложения
-
-Положите исходник как **`android/Newicon333.jpg`** или **`android/icon.png`**, затем:
-
-```powershell
-cd android
-.\scripts\GenerateLauncherIcons.ps1
-```
-
-Скрипт создаёт `mipmap-*/ic_launcher*.png` (для `Newicon333*` — масштаб **0.68** и фон `#2AABEE` в `colors.xml`; для логотипа без фона: `-Scale 0.52`). Приоритет: `Newicon333.*` → `android/icon.*` → корень репозитория → Desktop. После смены иконки: пересборка APK и переустановка (лаунчер кэширует иконки).
 
 ---
 

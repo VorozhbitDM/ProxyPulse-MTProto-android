@@ -10,14 +10,14 @@ android {
     namespace = "com.proxypulse"
     compileSdk = 35
 
-    val appVersionLabel = "2.9"
+    val appVersionLabel = "3.0"
 
     defaultConfig {
         applicationId = "com.proxypulse"
         minSdk = 26
         targetSdk = 34
-        versionCode = 291
-        versionName = "$appVersionLabel.0"
+        versionCode = 300
+        versionName = "$appVersionLabel.0-lite"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "VERSION_LABEL", "\"$appVersionLabel\"")
     }

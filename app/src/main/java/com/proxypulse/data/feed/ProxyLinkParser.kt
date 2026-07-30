@@ -4,7 +4,6 @@ import com.proxypulse.domain.ProxyEntry
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -13,19 +12,6 @@ import java.util.Locale
 object ProxyLinkParser {
     private val linkRegex = Regex(
         """(?:tg://proxy/?\?|https?://(?:t\.me|telegram\.me)/proxy\?|/proxy\?)([^"'\s<>]+)""",
-        RegexOption.IGNORE_CASE
-    )
-    private val postIdRegex = Regex("""data-post="[^"]+/(\d+)"""")
-    private val archiveNextPageRegex = Regex(
-        """<link\s+rel="prev"\s+href="([^"]*?ProxyMTProto\?before=\d+[^"]*)"""",
-        RegexOption.IGNORE_CASE
-    )
-    private val archiveMorePageRegex = Regex(
-        """href="(/web/\d+(?:if_|id_)?/?https://t\.me/s/ProxyMTProto\?before=\d+)"""",
-        RegexOption.IGNORE_CASE
-    )
-    private val archiveSnapshotRegex = Regex(
-        """/web/(\d{14})(?:if_|id_)?/?https://t\.me/s/ProxyMTProto""",
         RegexOption.IGNORE_CASE
     )
     private val messageBlockRegex = Regex("""data-post="([^"]+)"""", RegexOption.IGNORE_CASE)
@@ -43,6 +29,14 @@ object ProxyLinkParser {
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
     )
     private val tgStatDateRegex = Regex("""(\d{1,2}\s+[A-Za-z]{3},?\s+\d{1,2}:\d{2})""")
+    private val tgStatPostContainerRegex = Regex(
+        """id="post-\d+"[^>]*class="[^"]*post-container[^"]*"|class="[^"]*post-container[^"]*"""",
+        RegexOption.IGNORE_CASE
+    )
+    private val tgStatReactionsRegex = Regex(
+        """uil-thumbs-up[^>]*>\s*</i>\s*(\d+)""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
     private val inlineFieldsRegex = Regex(
         """server=([^&\s"'<>]+)&port=(\d+)&secret=([0-9a-fA-F+/=]+)""",
         RegexOption.IGNORE_CASE
@@ -61,64 +55,24 @@ object ProxyLinkParser {
         if (text.isNullOrEmpty()) return emptyList()
         val normalized = text.replace("&amp;", "&")
         val list = mutableListOf<ProxyEntry>()
-        val pageDate = tryParseArchivePageDate(normalized)
         val isTgStat = htmlLooksLikeTgStat(normalized)
 
-        if (isTgStat) parseTgStatBlocks(normalized, list)
-        parseTelegramPosts(normalized, list, pageDate)
-        parsePlainLinks(normalized, list, pageDate)
-        parsePlainTextProxies(normalized, list, pageDate)
-        if (!isTgStat) parseTgStatBlocks(normalized, list)
+        if (isTgStat) {
+            parseTgStatPosts(normalized, list)
+            if (list.isEmpty()) parseTgStatBlocks(normalized, list, reactions = 0)
+        } else {
+            parseTelegramPosts(normalized, list)
+            parsePlainLinks(normalized, list, null)
+            parsePlainTextProxies(normalized, list, null)
+        }
 
         return mergeParsedEntries(list)
     }
 
-    fun getArchiveSnapshotId(html: String?): String? {
-        if (html.isNullOrEmpty()) return null
-        return archiveSnapshotRegex.find(html)?.groupValues?.get(1)
-    }
-
-    fun getPaginationBeforeId(html: String?): Long? {
-        if (html.isNullOrEmpty()) return null
-        var minId: Long? = null
-        for (match in postIdRegex.findAll(html)) {
-            val id = match.groupValues[1].toLongOrNull() ?: continue
-            if (minId == null || id < minId) minId = id
-        }
-        return minId
-    }
-
-    fun getArchiveNextPageHref(html: String?): String? {
-        if (html.isNullOrEmpty()) return null
-        val m = archiveNextPageRegex.find(html)
-        if (m != null) return normalizeArchiveFeedHref(m.groupValues[1])
-        val m2 = archiveMorePageRegex.find(html)
-        return m2?.groupValues?.get(1)?.let { normalizeArchiveFeedHref(it) }
-    }
-
-    fun getNextPageBeforeId(html: String?): Long? {
-        val href = getArchiveNextPageHref(html)
-        if (!href.isNullOrEmpty()) {
-            ArchiveUrlHelper.parseBeforeId("https://web.archive.org$href")?.let { return it }
-        }
-        return getPaginationBeforeId(html)
-    }
-
-    fun buildArchivePageUrl(snapshotId: String?, beforeId: Long?): String? {
-        if (snapshotId.isNullOrEmpty()) return null
-        var url = "https://web.archive.org/web/${snapshotId}if_/https://t.me/s/ProxyMTProto"
-        if (beforeId != null) url += "?before=$beforeId"
-        return url
-    }
-
-    fun buildTelegramPageUrl(baseUrl: String?, beforeId: Long): String? {
-        if (baseUrl.isNullOrEmpty()) return null
-        val separator = if (baseUrl.contains('?')) "&" else "?"
-        return "$baseUrl${separator}before=$beforeId"
-    }
-
     private fun htmlLooksLikeTgStat(html: String): Boolean =
-        html.contains("tgstat.com", ignoreCase = true) || html.contains("tgstat.ru", ignoreCase = true)
+        html.contains("tgstat.com", ignoreCase = true) ||
+            html.contains("tgstat.ru", ignoreCase = true) ||
+            tgStatPostContainerRegex.containsMatchIn(html)
 
     private fun mergeParsedEntries(list: List<ProxyEntry>): List<ProxyEntry> {
         val map = linkedMapOf<String, ProxyEntry>()
@@ -126,25 +80,30 @@ object ProxyLinkParser {
             val existing = map[entry.key.lowercase()]
             if (existing == null) {
                 map[entry.key.lowercase()] = entry
-            } else if (entry.publishedAt != null) {
-                val incomingDate = entry.publishedAt
-                val existingDate = existing.publishedAt
-                if (existingDate == null || incomingDate!!.isAfter(existingDate)) {
-                    existing.publishedAt = incomingDate
+            } else {
+                if (entry.reactionsCount > existing.reactionsCount) {
+                    existing.reactionsCount = entry.reactionsCount
+                }
+                if (entry.publishedAt != null) {
+                    val incomingDate = entry.publishedAt
+                    val existingDate = existing.publishedAt
+                    if (existingDate == null || incomingDate!!.isAfter(existingDate)) {
+                        existing.publishedAt = incomingDate
+                    }
                 }
             }
         }
         return map.values.toList()
     }
 
-    private fun parseTelegramPosts(html: String, list: MutableList<ProxyEntry>, pageDate: Instant?) {
+    private fun parseTelegramPosts(html: String, list: MutableList<ProxyEntry>) {
         val matches = messageBlockRegex.findAll(html).toList()
         if (matches.isEmpty()) return
         for (i in matches.indices) {
             val start = matches[i].range.first
             val end = if (i + 1 < matches.size) matches[i + 1].range.first else html.length
             val chunk = html.substring(start, end)
-            val publishedAt = extractPostDate(chunk) ?: pageDate
+            val publishedAt = extractPostDate(chunk)
             parsePlainLinks(chunk, list, publishedAt)
             parsePlainTextProxies(chunk, list, publishedAt)
         }
@@ -168,13 +127,6 @@ object ProxyLinkParser {
         }
     }
 
-    private fun tryParseArchivePageDate(html: String): Instant? {
-        val snapshotId = getArchiveSnapshotId(html) ?: return null
-        if (snapshotId.length < 8) return null
-        val date = LocalDate.parse(snapshotId.substring(0, 8), DateTimeFormatter.BASIC_ISO_DATE)
-        return date.atStartOfDay(ZoneOffset.UTC).toInstant()
-    }
-
     private fun parsePlainLinks(text: String, list: MutableList<ProxyEntry>, publishedAt: Instant?) {
         for (match in linkRegex.findAll(text)) {
             tryParseQuery(match.groupValues[1])?.let {
@@ -191,12 +143,43 @@ object ProxyLinkParser {
         }
     }
 
-    private fun parseTgStatBlocks(html: String, list: MutableList<ProxyEntry>) {
+    private fun parseTgStatPosts(html: String, list: MutableList<ProxyEntry>) {
+        val starts = tgStatPostContainerRegex.findAll(html).map { it.range.first }.toList()
+        if (starts.isEmpty()) return
+        for (i in starts.indices) {
+            val start = starts[i]
+            val end = if (i + 1 < starts.size) starts[i + 1] else html.length
+            val chunk = html.substring(start, end)
+            val reactions = extractTgStatReactions(chunk)
+            val publishedAt = extractTgStatDateFromChunk(chunk)
+            val chunkList = mutableListOf<ProxyEntry>()
+            parseTgStatBlocks(chunk, chunkList, reactions)
+            parsePlainLinks(chunk, chunkList, publishedAt)
+            for (entry in chunkList) {
+                if (entry.reactionsCount == 0) entry.reactionsCount = reactions
+                if (entry.publishedAt == null) entry.publishedAt = publishedAt
+                list.add(entry)
+            }
+        }
+    }
+
+    private fun extractTgStatReactions(chunk: String): Int =
+        tgStatReactionsRegex.find(chunk)?.groupValues?.get(1)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+    private fun extractTgStatDateFromChunk(chunk: String): Instant? {
+        for (match in tgStatDateRegex.findAll(chunk)) {
+            tryParseTgStatDate(match.groupValues[1])?.let { return it }
+        }
+        return null
+    }
+
+    private fun parseTgStatBlocks(html: String, list: MutableList<ProxyEntry>, reactions: Int) {
         val seen = mutableSetOf<String>()
         for (match in tgStatProxyRegex.findAll(html)) {
             buildEntry(match.groupValues[1], match.groupValues[2], match.groupValues[3])?.let { entry ->
                 if (!seen.add(entry.key.lowercase())) return@let
                 entry.publishedAt = extractTgStatPostDate(html, match.range.first)
+                entry.reactionsCount = reactions
                 list.add(entry)
             }
         }
@@ -279,16 +262,4 @@ object ProxyLinkParser {
 
     private fun stripTags(value: String): String =
         value.replace(Regex("<[^>]+>"), "").trim()
-
-    private fun normalizeArchiveFeedHref(href: String?): String? {
-        if (href.isNullOrBlank()) return null
-        var path = href.trim()
-        if (path.startsWith("http", ignoreCase = true) &&
-            path.contains("web.archive.org", ignoreCase = true)
-        ) {
-            val idx = path.indexOf("/web/", ignoreCase = true)
-            if (idx >= 0) path = path.substring(idx)
-        }
-        return if (path.startsWith('/')) path else "/$path"
-    }
 }

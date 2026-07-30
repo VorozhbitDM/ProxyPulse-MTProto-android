@@ -18,30 +18,41 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -51,19 +62,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.RadioButton
 import com.proxypulse.AppLinks
 import com.proxypulse.BuildConfig
-import com.proxypulse.domain.FeedSourceMode
 import com.proxypulse.R
-import com.proxypulse.data.settings.SettingsRepository
 import com.proxypulse.domain.ProxyEntry
+import com.proxypulse.domain.SortMode
+import com.proxypulse.ui.theme.PingColor
 import com.proxypulse.ui.theme.pingAccentColor
 import com.proxypulse.ui.theme.pingTextColor
 import com.proxypulse.ui.theme.ProxyPulseTheme
-import kotlin.math.roundToInt
 
 @Composable
 fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
@@ -100,6 +107,7 @@ fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
                             state = uiState,
                             onCancel = { viewModel.cancelSearch() },
                             onNewSearch = { viewModel.newSearch() },
+                            onSortMode = { viewModel.setSortMode(it) },
                             onOpenProxy = { entry ->
                                 TelegramLauncher.openProxy(context, entry)
                             },
@@ -107,20 +115,8 @@ fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
                         )
                     }
                     Screen.Settings -> SettingsScreen(
-                        maxProxies = uiState.settingsDraftMax,
                         darkTheme = uiState.settingsDraftDark,
-                        feedSource = uiState.settingsDraftFeedSource,
-                        tgStatStatus = uiState.tgStatStatus,
-                        tgStatBusy = uiState.tgStatBusy,
-                        tgStatHasSession = uiState.tgStatHasSession,
-                        tgStatCanOpenBot = uiState.tgStatAuthKey != null,
-                        onMaxChange = { viewModel.updateSettingsDraftMax(it) },
                         onDarkChange = { viewModel.updateSettingsDraftDark(it) },
-                        onFeedSourceChange = { viewModel.updateSettingsDraftFeedSource(it) },
-                        onTgStatLogin = { viewModel.startTgStatTelegramLogin() },
-                        onTgStatOpenBot = { viewModel.openTgStatTelegramBot() },
-                        onTgStatVerify = { viewModel.verifyTgStatSession() },
-                        onTgStatClear = { viewModel.clearTgStatSession() },
                         onSave = { viewModel.saveSettings() }
                     )
                     Screen.Help -> HelpScreen()
@@ -131,7 +127,7 @@ fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
         uiState.feedError?.let { msg ->
             AlertDialog(
                 onDismissRequest = { viewModel.clearFeedError() },
-                title = { Text("ProxyPulse") },
+                title = { Text("ProxyPulse Lite") },
                 text = { Text(msg) },
                 confirmButton = {
                     Button(onClick = { viewModel.clearFeedError() }) {
@@ -224,20 +220,49 @@ private fun ScanScreen(
     state: MainUiState,
     onCancel: () -> Unit,
     onNewSearch: () -> Unit,
+    onSortMode: (SortMode) -> Unit,
     onOpenProxy: (ProxyEntry) -> Unit,
     onRecheck: (ProxyEntry) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    var lastSortMode by remember { mutableStateOf(state.sortMode) }
+    LaunchedEffect(state.sortMode) {
+        if (state.sortMode != lastSortMode) {
+            lastSortMode = state.sortMode
+            if (state.proxies.isNotEmpty()) {
+                listState.scrollToItem(0)
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         if (state.isSearching || state.fetchComplete || state.activityLine.isNotEmpty()) {
             LinearProgressIndicator(
                 progress = { state.progressPercent / 100f },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             )
-            Text(
-                text = state.progressText,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = state.progressText,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (state.showFoundCount) {
+                    Text(
+                        text = stringResource(R.string.found_count, state.foundCount),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
             val showActivityLog = state.isSearching && !state.fetchComplete
             if (showActivityLog && state.activityLine.isNotEmpty() && state.activityLine != state.progressText) {
                 Text(
@@ -249,29 +274,28 @@ private fun ScanScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (state.showFoundCount) {
-                Text(
-                    stringResource(R.string.found_count, state.foundCount),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (state.isSearching) {
-                    OutlinedButton(onClick = onCancel) {
-                        Text(stringResource(R.string.cancel_search))
-                    }
-                } else {
-                    Button(onClick = onNewSearch) {
-                        Text(stringResource(R.string.new_search))
-                    }
+            if (state.isSearching) {
+                OutlinedButton(onClick = onCancel) {
+                    Text(stringResource(R.string.cancel_search))
                 }
+            } else {
+                Button(onClick = onNewSearch) {
+                    Text(stringResource(R.string.new_search))
+                }
+            }
+            if (state.proxies.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                SortBar(
+                    sortMode = state.sortMode,
+                    onSortMode = onSortMode
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -285,6 +309,68 @@ private fun ScanScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SortBar(
+    sortMode: SortMode,
+    onSortMode: (SortMode) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Sort,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SortChip(
+                label = stringResource(R.string.sort_rating),
+                selected = sortMode == SortMode.Rating,
+                onClick = { onSortMode(SortMode.Rating) }
+            )
+            SortChip(
+                label = stringResource(R.string.sort_ping),
+                selected = sortMode == SortMode.Ping,
+                onClick = { onSortMode(SortMode.Ping) }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SortChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier.height(32.dp),
+        label = {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors()
+    )
 }
 
 @Composable
@@ -311,18 +397,31 @@ private fun ProxyCard(
                     .fillMaxHeight()
                     .background(accentColor)
             )
-            Row(
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = !isRechecking) { onOpen(entry) }
+                Text(
+                    text = entry.displayLabel,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(entry.displayLabel, fontWeight = FontWeight.SemiBold)
+                    if (!isRechecking && entry.isAvailable) {
+                        Text(
+                            text = entry.ratingDisplay,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PingColor.StarGold
+                        )
+                    }
                     Text(
                         text = if (isRechecking) {
                             stringResource(R.string.rechecking)
@@ -332,41 +431,42 @@ private fun ProxyCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = entry.pingTextColor(isRechecking)
                     )
-                    if (!isRechecking) {
-                        entry.publishedCaption?.let { caption ->
-                            Text(
-                                text = caption,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
                 }
                 if (!isRechecking) {
-                    Text(
-                        text = stringResource(R.string.connect_hint),
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .clickable { onOpen(entry) },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (isRechecking) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(28.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    OutlinedButton(
-                        onClick = { onRecheck(entry) },
-                        modifier = Modifier.padding(start = 4.dp)
-                    ) {
-                        Text(stringResource(R.string.recheck), fontSize = 12.sp)
+                    entry.publishedCaption?.let { caption ->
+                        Text(
+                            text = caption,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
+                }
+            }
+            if (isRechecking) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .size(28.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Button(
+                    onClick = { onOpen(entry) },
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                ) {
+                    Text(stringResource(R.string.connect), fontSize = 12.sp, maxLines = 1)
+                }
+                IconButton(
+                    onClick = { onRecheck(entry) },
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.recheck),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -375,131 +475,16 @@ private fun ProxyCard(
 
 @Composable
 private fun SettingsScreen(
-    maxProxies: Int,
     darkTheme: Boolean,
-    feedSource: FeedSourceMode,
-    tgStatStatus: String,
-    tgStatBusy: Boolean,
-    tgStatHasSession: Boolean,
-    tgStatCanOpenBot: Boolean,
-    onMaxChange: (Int) -> Unit,
     onDarkChange: (Boolean) -> Unit,
-    onFeedSourceChange: (FeedSourceMode) -> Unit,
-    onTgStatLogin: () -> Unit,
-    onTgStatOpenBot: () -> Unit,
-    onTgStatVerify: () -> Unit,
-    onTgStatClear: () -> Unit,
     onSave: () -> Unit
 ) {
-    val min = SettingsRepository.MIN_MAX
-    val max = SettingsRepository.MAX_MAX
-    val scroll = rememberScrollState()
-    val showTgStat = feedSource == FeedSourceMode.Bypass
-    val highlightLogin = showTgStat && !tgStatHasSession && !tgStatCanOpenBot
-    val highlightVerify = showTgStat && (tgStatHasSession || tgStatCanOpenBot)
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(stringResource(R.string.max_proxies), style = MaterialTheme.typography.titleMedium)
-        Text("$maxProxies", style = MaterialTheme.typography.headlineSmall)
-        Slider(
-            value = maxProxies.toFloat(),
-            onValueChange = { raw ->
-                onMaxChange(SettingsRepository.snapProxyLimit(raw.roundToInt()))
-            },
-            valueRange = min.toFloat()..max.toFloat()
-        )
-        Text(
-            text = stringResource(R.string.max_proxies_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
-
-        Text(stringResource(R.string.feed_source), style = MaterialTheme.typography.titleMedium)
-        FeedSourceRow(
-            label = stringResource(R.string.feed_source_direct),
-            selected = feedSource == FeedSourceMode.Direct,
-            onClick = { onFeedSourceChange(FeedSourceMode.Direct) }
-        )
-        FeedSourceRow(
-            label = stringResource(R.string.feed_source_bypass),
-            selected = feedSource == FeedSourceMode.Bypass,
-            onClick = { onFeedSourceChange(FeedSourceMode.Bypass) }
-        )
-        Text(
-            text = if (feedSource == FeedSourceMode.Direct) {
-                stringResource(R.string.feed_hint_direct)
-            } else {
-                stringResource(R.string.feed_hint_bypass)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-        )
-
-        if (showTgStat) {
-            Text(stringResource(R.string.tgstat_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.tgstat_step1), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.tgstat_step2), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.tgstat_step3), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.tgstat_step4), style = MaterialTheme.typography.bodySmall)
-            Text(stringResource(R.string.tgstat_step5), style = MaterialTheme.typography.bodySmall)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (highlightLogin) {
-                    Button(onClick = onTgStatLogin, enabled = !tgStatBusy) {
-                        Text(stringResource(R.string.tgstat_login_telegram))
-                    }
-                } else {
-                    OutlinedButton(onClick = onTgStatLogin, enabled = !tgStatBusy) {
-                        Text(stringResource(R.string.tgstat_login_telegram))
-                    }
-                }
-                if (tgStatCanOpenBot) {
-                    Button(onClick = onTgStatOpenBot, enabled = !tgStatBusy) {
-                        Text(stringResource(R.string.tgstat_open_telegram))
-                    }
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (highlightVerify) {
-                    Button(onClick = onTgStatVerify, enabled = !tgStatBusy) {
-                        Text(stringResource(R.string.tgstat_verify))
-                    }
-                } else {
-                    OutlinedButton(onClick = onTgStatVerify, enabled = !tgStatBusy) {
-                        Text(stringResource(R.string.tgstat_verify))
-                    }
-                }
-                OutlinedButton(onClick = onTgStatClear, enabled = !tgStatBusy) {
-                    Text(stringResource(R.string.tgstat_clear))
-                }
-            }
-
-            if (tgStatBusy) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.tgstat_connecting), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (tgStatStatus.isNotEmpty()) {
-                Text(
-                    tgStatStatus,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -512,19 +497,6 @@ private fun SettingsScreen(
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.save))
         }
-    }
-}
-
-@Composable
-private fun FeedSourceRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Text(label, modifier = Modifier.padding(start = 4.dp))
     }
 }
 

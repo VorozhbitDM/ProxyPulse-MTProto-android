@@ -1,18 +1,14 @@
 package com.proxypulse.ui
 
 import android.app.Application
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.proxypulse.data.feed.CollectProgress
 import com.proxypulse.data.feed.ProxyFeedService
 import com.proxypulse.data.health.ProxyHealthService
-import com.proxypulse.data.network.HttpSession
 import com.proxypulse.data.settings.AppSettings
 import com.proxypulse.data.settings.SettingsRepository
-import com.proxypulse.data.tgstat.TgStatAuthService
-import com.proxypulse.domain.FeedSourceMode
 import com.proxypulse.domain.ProxyEntry
+import com.proxypulse.domain.SortMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,13 +37,8 @@ data class MainUiState(
     val proxies: List<ProxyEntry> = emptyList(),
     val recheckingKeys: Set<String> = emptySet(),
     val feedError: String? = null,
-    val settingsDraftMax: Int = SettingsRepository.DEFAULT_MAX,
-    val settingsDraftDark: Boolean = true,
-    val settingsDraftFeedSource: FeedSourceMode = FeedSourceMode.Bypass,
-    val tgStatStatus: String = "",
-    val tgStatBusy: Boolean = false,
-    val tgStatHasSession: Boolean = false,
-    val tgStatAuthKey: String? = null
+    val sortMode: SortMode = SortMode.Rating,
+    val settingsDraftDark: Boolean = true
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,11 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val sortedList = SortedProxyList()
 
     private var searchJob: Job? = null
-    private var tgStatLoginJob: Job? = null
-    private var tgStatLoginSession: HttpSession? = null
-    private var tgStatPendingAuthKey: String? = null
     private var collectFound = 0
-    private var proxiesTarget = SettingsRepository.DEFAULT_MAX
     private var finalDiscovered = 0
     private var checkedCount = 0
     private var lastCollectLog: String? = null
@@ -78,66 +65,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             settings.collect { s ->
-                _uiState.update {
-                    it.copy(
-                        settingsDraftMax = SettingsRepository.snapProxyLimit(s.maxProxiesToCollect),
-                        settingsDraftDark = s.useDarkTheme,
-                        settingsDraftFeedSource = s.feedSource,
-                        tgStatHasSession = s.hasTgStatSession
-                    )
-                }
+                _uiState.update { it.copy(settingsDraftDark = s.useDarkTheme) }
             }
         }
     }
 
     fun openSettings() {
-        val s = settings.value
         _uiState.update {
             it.copy(
                 screen = Screen.Settings,
-                settingsDraftMax = s.maxProxiesToCollect,
-                settingsDraftDark = s.useDarkTheme,
-                settingsDraftFeedSource = s.feedSource,
-                tgStatHasSession = s.hasTgStatSession,
-                tgStatStatus = when {
-                    s.hasTgStatSession -> getApplication<Application>().getString(
-                        com.proxypulse.R.string.tgstat_session_saved
-                    )
-                    tgStatPendingAuthKey != null -> getApplication<Application>().getString(
-                        com.proxypulse.R.string.tgstat_after_start
-                    )
-                    else -> ""
-                },
-                tgStatAuthKey = tgStatPendingAuthKey
+                settingsDraftDark = settings.value.useDarkTheme
             )
         }
     }
 
     fun closeSettings() {
-        tgStatLoginJob?.cancel()
         _uiState.update {
             it.copy(
-                screen = if (it.isSearching || it.fetchComplete) Screen.Scan else Screen.Welcome,
-                tgStatBusy = false
+                screen = if (it.isSearching || it.fetchComplete) Screen.Scan else Screen.Welcome
             )
         }
-    }
-
-    /** После возврата из Telegram — завершить вход, если Start уже нажат. */
-    fun onAppForeground() {
-        if (_uiState.value.screen != Screen.Settings) return
-        if (settings.value.hasTgStatSession) return
-        if (tgStatLoginSession == null || tgStatPendingAuthKey.isNullOrBlank()) return
-        if (tgStatLoginJob?.isActive == true) return
-        tryCompleteTgStatLogin(auto = true)
-    }
-
-    fun updateSettingsDraftMax(max: Int) {
-        _uiState.update { it.copy(settingsDraftMax = SettingsRepository.snapProxyLimit(max)) }
-    }
-
-    fun updateSettingsDraftFeedSource(mode: FeedSourceMode) {
-        _uiState.update { it.copy(settingsDraftFeedSource = mode) }
     }
 
     fun openHelp() {
@@ -146,10 +93,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeHelp() {
         _uiState.update {
-            it.copy(screen = when {
-                it.isSearching || it.fetchComplete -> Screen.Scan
-                else -> Screen.Welcome
-            })
+            it.copy(
+                screen = when {
+                    it.isSearching || it.fetchComplete -> Screen.Scan
+                    else -> Screen.Welcome
+                }
+            )
         }
     }
 
@@ -160,189 +109,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveSettings() {
         val draft = _uiState.value
         viewModelScope.launch {
-            settingsRepo.update(
-                draft.settingsDraftMax,
-                draft.settingsDraftDark,
-                draft.settingsDraftFeedSource
-            )
+            settingsRepo.update(draft.settingsDraftDark)
             closeSettings()
         }
     }
 
-    fun startTgStatTelegramLogin() {
-        tgStatLoginJob?.cancel()
-        tgStatLoginJob = viewModelScope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) {
-                _uiState.update {
-                    it.copy(
-                        tgStatBusy = true,
-                        tgStatStatus = getApplication<Application>()
-                            .getString(com.proxypulse.R.string.tgstat_connecting)
-                    )
-                }
-            }
-            try {
-                val start = TgStatAuthService.startTelegramLogin()
-                if (!start.success || start.session == null) {
-                    withContext(Dispatchers.Main) {
-                        _uiState.update { it.copy(tgStatBusy = false, tgStatStatus = start.message) }
-                    }
-                    return@launch
-                }
-                tgStatLoginSession = start.session
-                tgStatPendingAuthKey = start.authKey
-                withContext(Dispatchers.Main) {
-                    val app = getApplication<Application>()
-                    _uiState.update {
-                        it.copy(
-                            tgStatBusy = false,
-                            tgStatAuthKey = start.authKey,
-                            tgStatStatus = app.getString(com.proxypulse.R.string.tgstat_after_start)
-                        )
-                    }
-                    if (!TgStatTelegramOpener.openBot(app, start.authKey)) {
-                        val failMsg = app.getString(
-                            com.proxypulse.R.string.tgstat_open_telegram_failed,
-                            start.telegramDeepLink
-                        )
-                        _uiState.update { it.copy(tgStatStatus = failMsg) }
-                        Toast.makeText(app, com.proxypulse.R.string.no_telegram, Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (_: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    _uiState.update { it.copy(tgStatBusy = false) }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    _uiState.update {
-                        it.copy(tgStatBusy = false, tgStatStatus = e.message ?: e.toString())
-                    }
-                }
-            }
-        }
-    }
-
-    fun openTgStatTelegramBot() {
-        val authKey = _uiState.value.tgStatAuthKey ?: return
-        val app = getApplication<Application>()
-        if (!TgStatTelegramOpener.openBot(app, authKey)) {
-            Toast.makeText(app, com.proxypulse.R.string.no_telegram, Toast.LENGTH_LONG).show()
-            _uiState.update {
-                it.copy(
-                    tgStatStatus = app.getString(
-                        com.proxypulse.R.string.tgstat_open_telegram_failed,
-                        TgStatAuthService.buildTelegramDeepLink(authKey)
-                    )
-                )
-            }
-        }
-    }
-
-    fun verifyTgStatSession() {
-        tryCompleteTgStatLogin(auto = false)
-    }
-
-    private fun tryCompleteTgStatLogin(auto: Boolean) {
-        val savedCookies = settings.value.tgStatCookieHeader
-        val session = tgStatLoginSession
-        val authKey = tgStatPendingAuthKey ?: _uiState.value.tgStatAuthKey
-
-        if (savedCookies.isBlank() && (session == null || authKey.isNullOrBlank())) {
-            if (!auto) {
-                _uiState.update {
-                    it.copy(
-                        tgStatStatus = getApplication<Application>()
-                            .getString(com.proxypulse.R.string.tgstat_no_session)
-                    )
-                }
-            }
-            return
-        }
-
-        tgStatLoginJob?.cancel()
-        tgStatLoginJob = viewModelScope.launch(Dispatchers.IO) {
-            withContext(Dispatchers.Main) {
-                _uiState.update {
-                    it.copy(
-                        tgStatBusy = true,
-                        tgStatStatus = if (auto) {
-                            getApplication<Application>()
-                                .getString(com.proxypulse.R.string.tgstat_connecting)
-                        } else {
-                            ""
-                        }
-                    )
-                }
-            }
-            try {
-                val result = when {
-                    !savedCookies.isBlank() -> TgStatAuthService.testCookieHeader(savedCookies)
-                    session != null && !authKey.isNullOrBlank() -> {
-                        val poll = TgStatAuthService.pollTelegramAuth(session, authKey)
-                        if (!poll.isAuthenticated) {
-                            com.proxypulse.data.tgstat.TgStatAuthResult(
-                                isAuthenticated = false,
-                                canPaginate = false,
-                                message = poll.message
-                            )
-                        } else {
-                            TgStatAuthService.testSession(session)
-                        }
-                    }
-                    else -> return@launch
-                }
-
-                if (result.isAuthenticated && session != null) {
-                    val header = session.exportCookieHeader()
-                    if (header.isNotBlank()) {
-                        settingsRepo.setTgStatCookies(header)
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
-                    if (result.isAuthenticated) {
-                        clearPendingTgStatLogin()
-                    }
-                    _uiState.update {
-                        it.copy(
-                            tgStatBusy = false,
-                            tgStatHasSession = result.isAuthenticated,
-                            tgStatStatus = result.message
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    _uiState.update {
-                        it.copy(
-                            tgStatBusy = false,
-                            tgStatStatus = e.message ?: e.toString()
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun clearPendingTgStatLogin() {
-        tgStatLoginSession = null
-        tgStatPendingAuthKey = null
-        _uiState.update { it.copy(tgStatAuthKey = null) }
-    }
-
-    fun clearTgStatSession() {
-        tgStatLoginJob?.cancel()
-        clearPendingTgStatLogin()
-        viewModelScope.launch {
-            settingsRepo.clearTgStatCookies()
-            _uiState.update {
-                it.copy(
-                    tgStatHasSession = false,
-                    tgStatStatus = getApplication<Application>()
-                        .getString(com.proxypulse.R.string.tgstat_cleared)
-                )
-            }
+    fun setSortMode(mode: SortMode) {
+        sortedList.setSortMode(mode)
+        _uiState.update {
+            it.copy(
+                sortMode = mode,
+                proxies = sortedList.snapshot()
+            )
         }
     }
 
@@ -352,26 +130,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         collectFound = 0
         checkedCount = 0
         finalDiscovered = 0
-        val currentSettings = settings.value
-        proxiesTarget = currentSettings.maxProxiesToCollect
+        val sortMode = _uiState.value.sortMode
+        sortedList.setSortMode(sortMode)
 
         _uiState.update {
             MainUiState(
                 screen = Screen.Scan,
                 isSearching = true,
-                progressText = getApplication<Application>().getString(
-                    com.proxypulse.R.string.connecting
-                ),
-                statusText = getApplication<Application>().getString(
-                    com.proxypulse.R.string.connecting
-                ),
-                activityLine = getApplication<Application>().getString(
-                    com.proxypulse.R.string.connecting
-                ),
-                settingsDraftMax = it.settingsDraftMax,
-                settingsDraftDark = it.settingsDraftDark,
-                settingsDraftFeedSource = currentSettings.feedSource,
-                tgStatHasSession = currentSettings.hasTgStatSession
+                progressText = getApplication<Application>().getString(com.proxypulse.R.string.connecting),
+                statusText = getApplication<Application>().getString(com.proxypulse.R.string.connecting),
+                activityLine = getApplication<Application>().getString(com.proxypulse.R.string.connecting),
+                sortMode = sortMode,
+                settingsDraftDark = it.settingsDraftDark
             )
         }
 
@@ -383,16 +153,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     output = collected,
                     log = { line -> postActivityLine(line) },
                     progress = { p ->
-                        proxiesTarget = maxOf(1, p.proxiesTarget)
                         collectFound = p.proxiesFound
                         viewModelScope.launch(Dispatchers.Main.immediate) {
                             updateOverallProgress()
                         }
-                    },
-                    maxRecentProxies = proxiesTarget,
-                    maxCdxSnapshotsToScan = ProxyFeedService.DEFAULT_MAX_CDX_SNAPSHOTS,
-                    feedSource = currentSettings.feedSource,
-                    tgStatCookieHeader = currentSettings.tgStatCookieHeader
+                    }
                 )
 
                 finalDiscovered = collected.size
@@ -409,9 +174,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (collected.isEmpty()) {
-                    val base = getApplication<Application>().getString(
-                        com.proxypulse.R.string.feed_failed
-                    )
+                    val base = getApplication<Application>().getString(com.proxypulse.R.string.feed_failed)
                     val detail = lastCollectLog?.let { "\n\n$it" } ?: ""
                     withContext(Dispatchers.Main) {
                         _uiState.update {
@@ -547,8 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (state.searchCancelled) return
 
         val percent = if (!state.fetchComplete) {
-            val cap = maxOf(1, proxiesTarget)
-            minOf(50, (50.0 * collectFound / cap).toInt())
+            if (collectFound == 0) 5 else 40
         } else {
             val total = maxOf(1, finalDiscovered)
             50 + minOf(50, (50.0 * checkedCount / total).toInt())
@@ -572,7 +334,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (!state.fetchComplete) {
             if (collectFound == 0) return app.getString(com.proxypulse.R.string.connecting)
-            return app.getString(com.proxypulse.R.string.collect_progress, collectFound, proxiesTarget)
+            return app.getString(com.proxypulse.R.string.collect_progress, collectFound)
         }
         val total = maxOf(1, finalDiscovered)
         return if (checkedCount >= total) {

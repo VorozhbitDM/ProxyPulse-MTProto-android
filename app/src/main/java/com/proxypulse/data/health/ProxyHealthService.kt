@@ -24,13 +24,14 @@ data class ProxyCheckResult(
 )
 
 /**
- * 1) MTProxy handshake (Fake-TLS + obfuscated), 2) запасной TCP+secret (порт открыт).
- * Архивная лента часто мёртвая; без TCP-запаса список часто пустой.
+ * Availability: MTProxy handshake when possible, TCP+secret as fallback.
+ * Displayed ping is always TCP connect RTT — not full handshake time
+ * (handshake under 30-way scan looks much worse than a single recheck).
  */
 class ProxyHealthService(
     private val mtProxyTimeoutMs: Int = MtProxyVerifier.DEFAULT_CHECK_TIMEOUT_MS,
     private val tcpTimeoutMs: Int = 3500,
-    private val concurrency: Int = 30
+    private val concurrency: Int = 12
 ) {
     suspend fun scan(
         proxies: List<ProxyEntry>,
@@ -63,18 +64,21 @@ class ProxyHealthService(
 
     suspend fun checkOne(proxy: ProxyEntry): ProxyCheckResult = withContext(Dispatchers.IO) {
         coroutineContext.ensureActive()
-        val tcpPing = measureTcpPing(proxy.server, proxy.port, proxy.secret)
-            ?: return@withContext ProxyCheckResult(proxy, isAvailable = false, pingMs = null)
+        // Handshake first (also warms DNS); then a short TCP connect for the UI ping.
         val mtPing = MtProxyVerifier.measurePing(
             host = proxy.server,
             port = proxy.port,
             secretHex = proxy.secret,
             timeoutMs = mtProxyTimeoutMs
         )
+        val tcpPing = measureTcpPing(proxy.server, proxy.port, proxy.secret)
+        if (mtPing == null && tcpPing == null) {
+            return@withContext ProxyCheckResult(proxy, isAvailable = false, pingMs = null)
+        }
         ProxyCheckResult(
             entry = proxy,
             isAvailable = true,
-            pingMs = mtPing ?: tcpPing
+            pingMs = tcpPing ?: mtPing
         )
     }
 

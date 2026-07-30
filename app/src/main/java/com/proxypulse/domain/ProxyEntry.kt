@@ -1,11 +1,8 @@
 package com.proxypulse.domain
 
 import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 data class ProxyEntry(
     val server: String,
@@ -13,7 +10,9 @@ data class ProxyEntry(
     val secret: String,
     var pingMs: Int? = null,
     var isAvailable: Boolean = false,
-    var publishedAt: Instant? = null
+    var publishedAt: Instant? = null,
+    /** Реакции пользователей на пост TGStat (👍 / ★ и др.). */
+    var reactionsCount: Int = 0
 ) {
     val key: String
         get() = "$server|$port|$secret"
@@ -23,6 +22,9 @@ data class ProxyEntry(
 
     val pingDisplay: String
         get() = if (isAvailable && pingMs != null) "$pingMs ms" else "—"
+
+    val ratingDisplay: String
+        get() = "★ $reactionsCount"
 
     val publishedDisplay: String?
         get() = publishedAt?.atZone(ZoneId.systemDefault())

@@ -12,13 +12,15 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("settings")
 
 data class AppSettings(
-    val useDarkTheme: Boolean = true
+    val useDarkTheme: Boolean = true,
+    val pullHintDismissed: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
-            useDarkTheme = prefs[DARK_THEME_KEY] ?: true
+            useDarkTheme = prefs[DARK_THEME_KEY] ?: true,
+            pullHintDismissed = prefs[PULL_HINT_DISMISSED_KEY] ?: false
         )
     }
 
@@ -28,7 +30,14 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun setPullHintDismissed(dismissed: Boolean = true) {
+        context.dataStore.edit { prefs ->
+            prefs[PULL_HINT_DISMISSED_KEY] = dismissed
+        }
+    }
+
     companion object {
         private val DARK_THEME_KEY = booleanPreferencesKey("use_dark_theme")
+        private val PULL_HINT_DISMISSED_KEY = booleanPreferencesKey("pull_hint_dismissed")
     }
 }

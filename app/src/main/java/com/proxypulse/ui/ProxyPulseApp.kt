@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwipeDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -46,6 +47,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -108,6 +112,7 @@ fun ProxyPulseApp(viewModel: MainViewModel = viewModel()) {
                             onCancel = { viewModel.cancelSearch() },
                             onNewSearch = { viewModel.newSearch() },
                             onSortMode = { viewModel.setSortMode(it) },
+                            onDismissPullHint = { viewModel.dismissPullHint() },
                             onOpenProxy = { entry ->
                                 TelegramLauncher.openProxy(context, entry)
                             },
@@ -215,16 +220,19 @@ private fun WelcomeScreen(onStart: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScanScreen(
     state: MainUiState,
     onCancel: () -> Unit,
     onNewSearch: () -> Unit,
     onSortMode: (SortMode) -> Unit,
+    onDismissPullHint: () -> Unit,
     onOpenProxy: (ProxyEntry) -> Unit,
     onRecheck: (ProxyEntry) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val pullState = rememberPullToRefreshState()
     var lastSortMode by remember { mutableStateOf(state.sortMode) }
     LaunchedEffect(state.sortMode) {
         if (state.sortMode != lastSortMode) {
@@ -279,10 +287,6 @@ private fun ScanScreen(
                 OutlinedButton(onClick = onCancel) {
                     Text(stringResource(R.string.cancel_search))
                 }
-            } else {
-                Button(onClick = onNewSearch) {
-                    Text(stringResource(R.string.new_search))
-                }
             }
             if (state.proxies.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -291,20 +295,69 @@ private fun ScanScreen(
                     onSortMode = onSortMode
                 )
             }
+            if (state.showPullHint && !state.isSearching && state.proxies.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                PullHintBanner(onDismiss = onDismissPullHint)
+            }
             Spacer(Modifier.height(8.dp))
         }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        PullToRefreshBox(
+            isRefreshing = state.isSearching,
+            onRefresh = onNewSearch,
+            state = pullState,
+            modifier = Modifier.fillMaxSize()
         ) {
-            items(state.proxies, key = { it.key }) { entry ->
-                ProxyCard(
-                    entry = entry,
-                    isRechecking = entry.key in state.recheckingKeys,
-                    onOpen = onOpenProxy,
-                    onRecheck = onRecheck
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(state.proxies, key = { it.key }) { entry ->
+                    ProxyCard(
+                        entry = entry,
+                        isRechecking = entry.key in state.recheckingKeys,
+                        onOpen = onOpenProxy,
+                        onRecheck = onRecheck
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PullHintBanner(onDismiss: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SwipeDown,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.pull_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.pull_hint_dismiss),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -382,7 +435,9 @@ private fun ProxyCard(
 ) {
     val accentColor = entry.pingAccentColor()
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isRechecking) { onOpen(entry) },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -400,7 +455,7 @@ private fun ProxyCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp)
+                    .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)
             ) {
                 Text(
                     text = entry.displayLabel,
@@ -441,6 +496,12 @@ private fun ProxyCard(
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
+                    Text(
+                        text = stringResource(R.string.connect_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
             if (isRechecking) {
@@ -451,13 +512,6 @@ private fun ProxyCard(
                     strokeWidth = 2.dp
                 )
             } else {
-                Button(
-                    onClick = { onOpen(entry) },
-                    modifier = Modifier.height(36.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                ) {
-                    Text(stringResource(R.string.connect), fontSize = 12.sp, maxLines = 1)
-                }
                 IconButton(
                     onClick = { onRecheck(entry) },
                     modifier = Modifier.padding(end = 4.dp)

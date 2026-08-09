@@ -85,7 +85,7 @@ Release-сборка:
 
 Файл: `app\build\outputs\apk\release\app-release.apk`.
 
-Для GitHub Releases: `ProxyPulse-v3.0-lite-android.apk` (версию возьмите из `versionName` в `app/build.gradle.kts`).
+Для GitHub Releases: `ProxyPulse-v3.1-lite-android.apk` (версию возьмите из `versionName` в `app/build.gradle.kts`).
 
 Без `keystore.properties` release подписывается debug-ключом — для своего телефона это нормально. Для GitHub/Play создайте keystore — см. [docs/signing.md](docs/signing.md).
 

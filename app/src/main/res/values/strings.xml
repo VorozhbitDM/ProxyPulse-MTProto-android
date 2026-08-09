@@ -7,7 +7,7 @@
     <string name="new_search">Новый поиск</string>
     <string name="settings">Настройки</string>
     <string name="help">Справка</string>
-    <string name="help_desc">Lite-версия: загружает прокси с первой страницы TGStat (@ProxyMTProto), проверяет доступность и открывает выбранный прокси в Telegram. Рейтинг ★ — реакции пользователей на пост в канале. Сортировка — по рейтингу или по пингу. В Telegram часть может не подключиться — нажмите «Обновить».</string>
+    <string name="help_desc">Lite-версия: загружает прокси с первой страницы TGStat (@ProxyMTProto), проверяет доступность и уточняет пинг. Тап по карточке — подключение в Telegram. Потяните список вниз, чтобы начать поиск заново. Рейтинг ★ — реакции на пост. Сортировка — по рейтингу или по пингу.</string>
     <string name="help_github">Проект на GitHub</string>
     <string name="help_yoomoney">ЮMoney</string>
     <string name="link_open_failed">Не удалось открыть ссылку</string>
@@ -15,11 +15,12 @@
     <string name="collect_progress">Загрузка… %1$d прокси</string>
     <string name="check_progress">Проверка… %1$d/%2$d</string>
     <string name="check_done">Проверка завершена %1$d/%2$d</string>
+    <string name="refine_progress">Уточнение пинга… %1$d/%2$d</string>
+    <string name="refine_done">Пинг уточнён %1$d/%2$d</string>
     <string name="connecting">Подключение…</string>
     <string name="search_paused">Поиск приостановлен</string>
     <string name="search_done">Готово · %1$d прокси</string>
     <string name="recheck">Обновить</string>
-    <string name="connect">Подключить</string>
     <string name="rechecking">Проверка…</string>
     <string name="recheck_ok">%1$s — доступен</string>
     <string name="recheck_fail">%1$s — недоступен</string>
@@ -29,7 +30,9 @@
     <string name="feed_failed">Не удалось загрузить прокси с TGStat. Проверьте интернет.</string>
     <string name="no_telegram">Установите Telegram для подключения прокси</string>
     <string name="version_label">v%1$s</string>
-    <string name="connect_hint">Нажми для подключения</string>
+    <string name="connect_hint">Нажмите для подключения</string>
+    <string name="pull_hint">Потяните список вниз, чтобы начать поиск заново</string>
+    <string name="pull_hint_dismiss">Понятно</string>
     <string name="sort_ping">По пингу</string>
     <string name="sort_rating">По рейтингу</string>
 </resources>
